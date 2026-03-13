@@ -1,0 +1,4 @@
+.build
+.swiftpm
+Package.resolved
+NoteEditorWeb/node_modules
