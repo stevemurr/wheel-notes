@@ -79,6 +79,40 @@ struct NoteStoreTests {
         #expect(store.notes.first?.id == noteA.id)
     }
 
+    @Test("Rebinding the current workspace preserves unsaved in-memory edits")
+    func rebindingSameWorkspacePreservesUnsavedEdits() {
+        let store = makeStore()
+        let workspaceID = UUID()
+        store.bindToWorkspace(workspaceID)
+
+        let note = store.createNote()
+        store.updateDocument(
+            id: note.id,
+            document: NoteDocument(
+                root: [
+                    "type": AnyCodable("doc"),
+                    "content": AnyCodable([
+                        [
+                            "type": "paragraph",
+                            "content": [
+                                [
+                                    "type": "text",
+                                    "text": "Unsaved draft",
+                                ],
+                            ],
+                        ],
+                    ]),
+                ]
+            )
+        )
+
+        store.bindToWorkspace(workspaceID)
+
+        let updated = try! #require(store.note(with: note.id))
+        #expect(updated.title == "Unsaved draft")
+        #expect(updated.document.plainText(maxLength: Int.max) == "Unsaved draft")
+    }
+
     @Test("Source insertion updates excerpt and persists")
     func insertsPageSource() throws {
         let root = tempDirectory()

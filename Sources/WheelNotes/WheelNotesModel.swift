@@ -274,9 +274,8 @@ final class WheelNotesModel: WheelNotesSession {
         selectedNoteID = id
     }
 
-    func updateSelectedNoteDocument(_ document: NoteDocument) {
-        guard let selectedNoteID else { return }
-        noteStore.updateDocument(id: selectedNoteID, document: document)
+    func updateNoteDocument(id: UUID, document: NoteDocument) {
+        noteStore.updateDocument(id: id, document: document)
     }
 
     func allNotes() -> [NoteRecord] {
@@ -410,7 +409,7 @@ final class WheelNotesModel: WheelNotesSession {
 
         if selectedWorkspaceID != nextSelection {
             selectedWorkspaceID = nextSelection
-        } else if let selectedWorkspaceID {
+        } else if let selectedWorkspaceID, noteStore.currentWorkspaceID != selectedWorkspaceID {
             noteStore.bindToWorkspace(selectedWorkspaceID)
             if !noteStore.orderedNotes.contains(where: { $0.id == selectedNoteID }) {
                 selectedNoteID = noteStore.orderedNotes.first?.id

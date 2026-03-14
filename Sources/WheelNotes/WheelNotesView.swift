@@ -153,7 +153,7 @@ private struct WheelNoteEditorPane: View {
         .onChange(of: note.id) { _, _ in
             syncEditor(with: note, requestFocus: true)
         }
-        .onChange(of: note.updatedAt) { _, _ in
+        .onChange(of: note.document.canonicalJSONString) { _, _ in
             syncEditor(with: note)
         }
     }
@@ -162,15 +162,15 @@ private struct WheelNoteEditorPane: View {
         editorBridge.onReady = {
             syncEditor(with: model.selectedNote ?? note, force: true, requestFocus: true)
         }
-        editorBridge.onDocumentChanged = { document in
-            model.updateSelectedNoteDocument(document)
+        editorBridge.onDocumentChanged = { noteID, document in
+            model.updateNoteDocument(id: noteID, document: document)
         }
         editorBridge.onEditorError = { _ in }
     }
 
     private func syncEditor(with note: NoteRecord, force: Bool = false, requestFocus: Bool = false) {
         editorBridge.activate(noteID: note.id)
-        editorBridge.loadDocumentIfNeeded(note.document, force: force)
+        editorBridge.loadDocumentIfNeeded(noteID: note.id, document: note.document, force: force)
 
         if requestFocus {
             editorBridge.focusEditor()

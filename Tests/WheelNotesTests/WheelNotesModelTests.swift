@@ -71,6 +71,43 @@ final class WheelNotesModelTests: XCTestCase {
         model.stop()
     }
 
+    func testUnsavedSelectedNoteEditsSurviveWorkspaceRefresh() async throws {
+        let workspaceID = UUID()
+        let resources = makeWorkspaceResources(id: workspaceID, name: "Default")
+        let consumer = ConsumerClientStub(mode: .success(resources))
+        let provider = ProviderClientStub()
+        let context = try makeModelContext()
+        defer { context.cleanup() }
+
+        let model = WheelNotesModel(
+            noteStorageRoot: context.noteStorageRoot,
+            workspaceCacheURL: context.workspaceCacheURL,
+            defaults: context.defaults,
+            consumerClient: consumer,
+            providerClient: provider,
+            connectionAttemptTimeout: .milliseconds(50),
+            offlineReconnectInterval: .milliseconds(30),
+            onlineRefreshInterval: .milliseconds(40)
+        )
+        await model.start()
+
+        let connected = await waitUntil { model.isConnectedToWheel }
+        XCTAssertTrue(connected)
+
+        let note = try XCTUnwrap(model.createNote(title: ""))
+        let updated = try XCTUnwrap(model.appendPlainText("Unsaved body", to: note.id))
+        XCTAssertEqual(updated.title, "Unsaved body")
+
+        try await Task.sleep(for: .milliseconds(180))
+
+        let selected = try XCTUnwrap(model.selectedNote)
+        XCTAssertEqual(selected.id, note.id)
+        XCTAssertEqual(selected.title, "Unsaved body")
+        XCTAssertEqual(selected.document.plainText(maxLength: Int.max), "Unsaved body")
+
+        model.stop()
+    }
+
     private func makeWorkspaceResources(id: UUID, name: String) -> [FabricResourceDescriptor] {
         [
             FabricResourceDescriptor(

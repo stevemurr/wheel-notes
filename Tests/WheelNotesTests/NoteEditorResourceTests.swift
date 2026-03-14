@@ -23,6 +23,7 @@ struct NoteEditorResourceTests {
             """
             (() => {
               window.NoteEditor.receiveCommand('loadDocument', {
+                noteID: '00000000-0000-4000-8000-000000000001',
                 document: {
                   type: 'doc',
                   content: [
@@ -210,6 +211,57 @@ struct NoteEditorResourceTests {
         #expect((buttonCount as? NSNumber)?.intValue == 0)
     }
 
+    @Test("Bundled editor includes note identity in document change messages and accepts same-note reloads")
+    func documentChangesStayScopedToTheLoadedNote() async throws {
+        let recorder = ScriptMessageRecorder()
+        let webView = try await makeLoadedWebView(messageHandler: recorder)
+        let noteID = "00000000-0000-4000-8000-0000000000AA"
+
+        let result = try await webView.callAsyncJavaScript(
+            """
+            window.NoteEditor.receiveCommand('loadDocument', {
+              noteID: noteID,
+              document: {
+                type: 'doc',
+                content: [{ type: 'paragraph' }]
+              }
+            });
+
+            window.NoteEditor.debugInsertText('Draft');
+            await new Promise((resolve) => setTimeout(resolve, 160));
+
+            window.NoteEditor.receiveCommand('loadDocument', {
+              noteID: noteID,
+              document: {
+                type: 'doc',
+                content: [
+                  {
+                    type: 'paragraph',
+                    content: [{ type: 'text', text: 'Server copy' }]
+                  }
+                ]
+              }
+            });
+
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            return {
+              text: window.NoteEditor.debugCurrentText(),
+            };
+            """,
+            arguments: [
+                "noteID": noteID,
+            ],
+            in: nil,
+            contentWorld: .page
+        )
+        let payload = try #require(result as? [String: Any])
+        let message = try #require(await recorder.waitForMessage(type: "documentChanged"))
+        let messagePayload = try #require(message["payload"] as? [String: Any])
+
+        #expect(messagePayload["noteID"] as? String == noteID)
+        #expect(payload["text"] as? String == "Server copy")
+    }
+
     @Test("Switching notes focuses the editor at the top of the document")
     func switchingNotesResetsViewportToTop() async throws {
         let webView = try await makeLoadedWebView()
@@ -229,10 +281,16 @@ struct NoteEditorResourceTests {
               return null;
             }
 
-            window.NoteEditor.receiveCommand('loadDocument', { document: makeDocument('First') });
+            window.NoteEditor.receiveCommand('loadDocument', {
+              noteID: '00000000-0000-4000-8000-000000000002',
+              document: makeDocument('First')
+            });
             editor.scrollTop = editor.scrollHeight;
 
-            window.NoteEditor.receiveCommand('loadDocument', { document: makeDocument('Second') });
+            window.NoteEditor.receiveCommand('loadDocument', {
+              noteID: '00000000-0000-4000-8000-000000000003',
+              document: makeDocument('Second')
+            });
             window.NoteEditor.receiveCommand('focusEditor', {});
 
             await new Promise((resolve) => setTimeout(resolve, 25));
@@ -253,12 +311,16 @@ struct NoteEditorResourceTests {
         #expect((payload["scrollTop"] as? NSNumber)?.doubleValue == 0)
     }
 
-    private func makeLoadedWebView() async throws -> WKWebView {
+    private func makeLoadedWebView(messageHandler: WKScriptMessageHandler? = nil) async throws -> WKWebView {
         let htmlURL = try #require(NoteEditorResources.editorHTMLURL())
         let directoryURL = try #require(NoteEditorResources.editorDirectoryURL())
+        let configuration = WKWebViewConfiguration()
+        if let messageHandler {
+            configuration.userContentController.add(messageHandler, name: "noteEditorBridge")
+        }
         let webView = WKWebView(
             frame: CGRect(x: 0, y: 0, width: 320, height: 240),
-            configuration: WKWebViewConfiguration()
+            configuration: configuration
         )
 
         let delegate = NavigationDelegate()
@@ -292,5 +354,35 @@ private final class NavigationDelegate: NSObject, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         continuation?.resume(throwing: error)
         continuation = nil
+    }
+}
+
+@MainActor
+private final class ScriptMessageRecorder: NSObject, WKScriptMessageHandler {
+    private var messages: [[String: Any]] = []
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any] else {
+            return
+        }
+
+        messages.append(body)
+    }
+
+    func waitForMessage(type: String, timeout: Duration = .seconds(1)) async -> [String: Any]? {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            if let message = messages.first(where: { $0["type"] as? String == type }) {
+                return message
+            }
+
+            do {
+                try await Task.sleep(for: .milliseconds(10))
+            } catch {
+                return nil
+            }
+        }
+
+        return messages.first(where: { $0["type"] as? String == type })
     }
 }

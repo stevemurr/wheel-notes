@@ -6,7 +6,7 @@ import WheelSupport
 @MainActor
 public final class NoteEditorBridge: QueuedScriptBridge {
     public var onReady: (() -> Void)?
-    public var onDocumentChanged: ((NoteDocument) -> Void)?
+    public var onDocumentChanged: ((UUID, NoteDocument) -> Void)?
     public var onEditorError: ((String) -> Void)?
 
     private var lastDocumentFingerprint: String?
@@ -29,14 +29,14 @@ public final class NoteEditorBridge: QueuedScriptBridge {
         }
     }
 
-    public func loadDocumentIfNeeded(_ document: NoteDocument, force: Bool = false) {
+    public func loadDocumentIfNeeded(noteID: UUID, document: NoteDocument, force: Bool = false) {
         guard let fingerprint = fingerprint(for: document),
               force || fingerprint != lastDocumentFingerprint else {
             return
         }
 
         lastDocumentFingerprint = fingerprint
-        sendCommand("loadDocument", payload: DocumentPayload(document: document.root))
+        sendCommand("loadDocument", payload: DocumentPayload(noteID: noteID, document: document.root))
     }
 
     public func focusEditor() {
@@ -55,12 +55,17 @@ public final class NoteEditorBridge: QueuedScriptBridge {
     public override func didReceiveMessage(type: String, payload: [String: Any]) {
         switch type {
         case "documentChanged":
-            guard let document = decodeDocument(payload) else {
+            guard let payload = decodeDocumentPayload(payload) else {
                 onEditorError?("Editor sent an invalid document payload.")
                 return
             }
+            guard payload.noteID == activeNoteID else {
+                return
+            }
+
+            let document = NoteDocument(root: payload.document)
             lastDocumentFingerprint = fingerprint(for: document)
-            onDocumentChanged?(document)
+            onDocumentChanged?(payload.noteID, document)
         case "editorError":
             onEditorError?(payload["message"] as? String ?? "Unknown editor error")
         default:
@@ -72,11 +77,10 @@ public final class NoteEditorBridge: QueuedScriptBridge {
         onEditorError?(message)
     }
 
-    private func decodeDocument(_ payload: [String: Any]) -> NoteDocument? {
+    private func decodeDocumentPayload(_ payload: [String: Any]) -> DocumentPayload? {
         do {
             let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-            let payload = try JSONDecoder().decode(DocumentPayload.self, from: data)
-            return NoteDocument(root: payload.document)
+            return try JSONDecoder().decode(DocumentPayload.self, from: data)
         } catch {
             return nil
         }
@@ -116,6 +120,7 @@ public final class NoteEditorBridge: QueuedScriptBridge {
 }
 
 private struct DocumentPayload: Codable {
+    let noteID: UUID
     let document: [String: AnyCodable]
 }
 

@@ -20,14 +20,19 @@ struct NoteEditorBridgeTests {
     @Test("Document changed messages decode tiptap document payloads")
     func decodesChangedDocument() {
         let bridge = NoteEditorBridge()
+        let noteID = UUID()
         var receivedText: String?
-        bridge.onDocumentChanged = { document in
+        var receivedNoteID: UUID?
+        bridge.activate(noteID: noteID)
+        bridge.onDocumentChanged = { incomingNoteID, document in
+            receivedNoteID = incomingNoteID
             receivedText = document.plainText()
         }
 
         bridge.handleMessage([
             "type": "documentChanged",
             "payload": [
+                "noteID": noteID.uuidString,
                 "document": [
                     "type": "doc",
                     "content": [
@@ -45,7 +50,45 @@ struct NoteEditorBridgeTests {
             ],
         ])
 
+        #expect(receivedNoteID == noteID)
         #expect(receivedText == "Hello from Tiptap")
+    }
+
+    @Test("Stale document changed messages for an inactive note are ignored")
+    func ignoresStaleDocumentChangesAfterNoteSwitch() {
+        let bridge = NoteEditorBridge()
+        let firstNoteID = UUID()
+        let secondNoteID = UUID()
+        var receivedText: String?
+
+        bridge.activate(noteID: firstNoteID)
+        bridge.activate(noteID: secondNoteID)
+        bridge.onDocumentChanged = { _, document in
+            receivedText = document.plainText()
+        }
+
+        bridge.handleMessage([
+            "type": "documentChanged",
+            "payload": [
+                "noteID": firstNoteID.uuidString,
+                "document": [
+                    "type": "doc",
+                    "content": [
+                        [
+                            "type": "paragraph",
+                            "content": [
+                                [
+                                    "type": "text",
+                                    "text": "Stale update",
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ])
+
+        #expect(receivedText == nil)
     }
 
     @Test("Editor errors are forwarded")

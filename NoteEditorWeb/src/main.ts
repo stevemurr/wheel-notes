@@ -21,6 +21,16 @@ type BridgeMessage = {
   payload?: JSONObject
 }
 
+type LoadDocumentPayload = {
+  noteID?: string
+  document?: JSONObject
+}
+
+type DocumentChangePayload = {
+  noteID: string
+  document: JSONObject
+}
+
 type SourcePayload = {
   title: string
   url: string
@@ -57,6 +67,8 @@ declare global {
     NoteEditor: {
       receiveCommand: (command: string, payload: JSONObject) => void
       debugApplyMarkdown: (text: string) => JSONObject
+      debugCurrentText: () => string
+      debugInsertText: (text: string) => string
       debugOpenSlashMenu: (query: string) => JSONObject
       debugInsertImage: (mimeType: string, fileName?: string) => Promise<ImageInsertResult>
       debugPasteLink: (plainText: string, html?: string, uriList?: string) => LinkCardInsertResult
@@ -78,6 +90,7 @@ if (!editorElement) {
 }
 
 let documentChangeTimer: number | undefined
+let currentNoteID: string | null = null
 const supportedImageExtensions = new Set([
   'png',
   'jpg',
@@ -108,6 +121,10 @@ function isEmptyEditor(editor: Editor): boolean {
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, ' ').trim()
+}
+
+function normalizeNoteID(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null
 }
 
 function truncateText(value: string, maxLength: number): string {
@@ -992,7 +1009,15 @@ const editor = new Editor({
   onUpdate: ({ editor }) => {
     window.clearTimeout(documentChangeTimer)
     documentChangeTimer = window.setTimeout(() => {
-      sendBridgeMessage('documentChanged', { document: editor.getJSON() as JSONObject })
+      if (!currentNoteID) {
+        return
+      }
+
+      const payload: DocumentChangePayload = {
+        noteID: currentNoteID,
+        document: editor.getJSON() as JSONObject,
+      }
+      sendBridgeMessage('documentChanged', payload)
     }, 120)
   },
   onCreate: () => {
@@ -1000,9 +1025,13 @@ const editor = new Editor({
   },
 })
 
-function setDocument(document: JSONObject | undefined) {
+function setDocument(payload: LoadDocumentPayload | undefined) {
+  window.clearTimeout(documentChangeTimer)
+  documentChangeTimer = undefined
+  currentNoteID = normalizeNoteID(payload?.noteID)
+
   editor.commands.setContent(
-    document ?? {
+    payload?.document ?? {
       type: 'doc',
       content: [{ type: 'paragraph' }],
     },
@@ -1044,7 +1073,7 @@ window.NoteEditor = {
     try {
       switch (command) {
         case 'loadDocument':
-          setDocument(payload.document as JSONObject | undefined)
+          setDocument(payload as LoadDocumentPayload | undefined)
           break
         case 'focusEditor':
           focusEditorAtStart()
@@ -1065,20 +1094,23 @@ window.NoteEditor = {
     const triggerText = text.endsWith(' ') ? text.slice(0, -1) : text
 
     setDocument({
-      type: 'doc',
-      content: [
-        {
-          type: 'paragraph',
-          content: triggerText
-            ? [
-                {
-                  type: 'text',
-                  text: triggerText,
-                },
-              ]
-            : [],
-        },
-      ],
+      noteID: 'debug-note',
+      document: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: triggerText
+              ? [
+                  {
+                    type: 'text',
+                    text: triggerText,
+                  },
+                ]
+              : [],
+          },
+        ],
+      },
     })
     editor.commands.focus('start')
     editor.commands.focus('end')
@@ -1095,10 +1127,21 @@ window.NoteEditor = {
       level: attrs.level ?? 0,
     }
   },
+  debugCurrentText() {
+    return editor.getText({ blockSeparator: '\n' })
+  },
+  debugInsertText(text: string) {
+    editor.commands.focus('end')
+    editor.commands.insertContent(text)
+    return editor.getText({ blockSeparator: '\n' })
+  },
   debugOpenSlashMenu(query: string) {
     setDocument({
-      type: 'doc',
-      content: [{ type: 'paragraph' }],
+      noteID: 'debug-note',
+      document: {
+        type: 'doc',
+        content: [{ type: 'paragraph' }],
+      },
     })
     editor.commands.focus('start')
     editor.commands.focus('end')
@@ -1120,8 +1163,11 @@ window.NoteEditor = {
   },
   async debugInsertImage(mimeType: string, fileName?: string) {
     setDocument({
-      type: 'doc',
-      content: [{ type: 'paragraph' }],
+      noteID: 'debug-note',
+      document: {
+        type: 'doc',
+        content: [{ type: 'paragraph' }],
+      },
     })
     editor.commands.focus('end')
     await insertImageFiles(editor, [makeDebugImageFile(mimeType, fileName)])
@@ -1135,8 +1181,11 @@ window.NoteEditor = {
   },
   debugPasteLink(plainText: string, html = '', uriList = '') {
     setDocument({
-      type: 'doc',
-      content: [{ type: 'paragraph' }],
+      noteID: 'debug-note',
+      document: {
+        type: 'doc',
+        content: [{ type: 'paragraph' }],
+      },
     })
     editor.commands.focus('end')
 

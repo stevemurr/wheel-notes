@@ -20880,6 +20880,7 @@ img.ProseMirror-separator {
     throw new Error("Wheel note editor failed to find its editor root element.");
   }
   var documentChangeTimer;
+  var currentNoteID = null;
   var supportedImageExtensions = /* @__PURE__ */ new Set([
     "png",
     "jpg",
@@ -20906,6 +20907,9 @@ img.ProseMirror-separator {
   }
   function normalizeText(value) {
     return value.replace(/\s+/g, " ").trim();
+  }
+  function normalizeNoteID(value) {
+    return typeof value === "string" && value.trim().length > 0 ? value : null;
   }
   function truncateText(value, maxLength) {
     const normalized = normalizeText(value);
@@ -21617,16 +21621,26 @@ img.ProseMirror-separator {
     onUpdate: ({ editor: editor2 }) => {
       window.clearTimeout(documentChangeTimer);
       documentChangeTimer = window.setTimeout(() => {
-        sendBridgeMessage("documentChanged", { document: editor2.getJSON() });
+        if (!currentNoteID) {
+          return;
+        }
+        const payload = {
+          noteID: currentNoteID,
+          document: editor2.getJSON()
+        };
+        sendBridgeMessage("documentChanged", payload);
       }, 120);
     },
     onCreate: () => {
       sendBridgeMessage("ready");
     }
   });
-  function setDocument(document2) {
+  function setDocument(payload) {
+    window.clearTimeout(documentChangeTimer);
+    documentChangeTimer = void 0;
+    currentNoteID = normalizeNoteID(payload?.noteID);
     editor.commands.setContent(
-      document2 ?? {
+      payload?.document ?? {
         type: "doc",
         content: [{ type: "paragraph" }]
       },
@@ -21660,7 +21674,7 @@ img.ProseMirror-separator {
       try {
         switch (command2) {
           case "loadDocument":
-            setDocument(payload.document);
+            setDocument(payload);
             break;
           case "focusEditor":
             focusEditorAtStart();
@@ -21680,18 +21694,21 @@ img.ProseMirror-separator {
     debugApplyMarkdown(text) {
       const triggerText = text.endsWith(" ") ? text.slice(0, -1) : text;
       setDocument({
-        type: "doc",
-        content: [
-          {
-            type: "paragraph",
-            content: triggerText ? [
-              {
-                type: "text",
-                text: triggerText
-              }
-            ] : []
-          }
-        ]
+        noteID: "debug-note",
+        document: {
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              content: triggerText ? [
+                {
+                  type: "text",
+                  text: triggerText
+                }
+              ] : []
+            }
+          ]
+        }
       });
       editor.commands.focus("start");
       editor.commands.focus("end");
@@ -21705,10 +21722,21 @@ img.ProseMirror-separator {
         level: attrs.level ?? 0
       };
     },
+    debugCurrentText() {
+      return editor.getText({ blockSeparator: "\n" });
+    },
+    debugInsertText(text) {
+      editor.commands.focus("end");
+      editor.commands.insertContent(text);
+      return editor.getText({ blockSeparator: "\n" });
+    },
     debugOpenSlashMenu(query) {
       setDocument({
-        type: "doc",
-        content: [{ type: "paragraph" }]
+        noteID: "debug-note",
+        document: {
+          type: "doc",
+          content: [{ type: "paragraph" }]
+        }
       });
       editor.commands.focus("start");
       editor.commands.focus("end");
@@ -21728,8 +21756,11 @@ img.ProseMirror-separator {
     },
     async debugInsertImage(mimeType, fileName) {
       setDocument({
-        type: "doc",
-        content: [{ type: "paragraph" }]
+        noteID: "debug-note",
+        document: {
+          type: "doc",
+          content: [{ type: "paragraph" }]
+        }
       });
       editor.commands.focus("end");
       await insertImageFiles(editor, [makeDebugImageFile(mimeType, fileName)]);
@@ -21742,8 +21773,11 @@ img.ProseMirror-separator {
     },
     debugPasteLink(plainText, html = "", uriList = "") {
       setDocument({
-        type: "doc",
-        content: [{ type: "paragraph" }]
+        noteID: "debug-note",
+        document: {
+          type: "doc",
+          content: [{ type: "paragraph" }]
+        }
       });
       editor.commands.focus("end");
       const link = extractLinkCardPayload(plainText, html, uriList);

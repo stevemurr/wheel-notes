@@ -39,9 +39,11 @@ public final class NoteStore {
     }
 
     public func bindToWorkspace(_ workspaceID: UUID) {
-        if currentWorkspaceID != workspaceID {
-            flushPendingSaves()
+        if currentWorkspaceID == workspaceID {
+            return
         }
+
+        flushPendingSaves()
 
         currentWorkspaceID = workspaceID
         loadNotes(for: workspaceID)
