@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import WebKit
 import WheelSupport
@@ -19,6 +20,9 @@ public struct NoteEditorView: View {
             scriptMessageHandlers: [
                 .init(name: bridge.messageHandlerName, handler: bridge),
             ],
+            makeWebView: { configuration in
+                FocusFriendlyNoteEditorWebView(frame: .zero, configuration: configuration)
+            },
             configure: { webView in
                 webView.setValue(false, forKey: "drawsBackground")
                 bridge.attach(to: webView)
@@ -46,5 +50,15 @@ public struct NoteEditorView: View {
             """,
             baseURL: nil
         )
+    }
+}
+
+private final class FocusFriendlyNoteEditorWebView: WKWebView {
+    override var acceptsFirstResponder: Bool {
+        true
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
     }
 }

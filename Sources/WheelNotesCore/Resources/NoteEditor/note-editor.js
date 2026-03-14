@@ -21633,6 +21633,10 @@ img.ProseMirror-separator {
       false
     );
   }
+  function focusEditorAtStart() {
+    editorElement.scrollTop = 0;
+    editor.commands.focus("start", { scrollIntoView: false });
+  }
   function insertSourceBlock(source) {
     if (!source) {
       return;
@@ -21659,7 +21663,7 @@ img.ProseMirror-separator {
             setDocument(payload.document);
             break;
           case "focusEditor":
-            editor.commands.focus("end");
+            focusEditorAtStart();
             break;
           case "insertSourceBlock":
             insertSourceBlock(payload.source);

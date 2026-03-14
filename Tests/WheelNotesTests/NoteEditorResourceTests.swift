@@ -210,10 +210,56 @@ struct NoteEditorResourceTests {
         #expect((buttonCount as? NSNumber)?.intValue == 0)
     }
 
+    @Test("Switching notes focuses the editor at the top of the document")
+    func switchingNotesResetsViewportToTop() async throws {
+        let webView = try await makeLoadedWebView()
+
+        let result = try await webView.callAsyncJavaScript(
+            """
+            const makeDocument = (prefix) => ({
+              type: 'doc',
+              content: Array.from({ length: 80 }, (_, index) => ({
+                type: 'paragraph',
+                content: [{ type: 'text', text: `${prefix} line ${index + 1}` }],
+              })),
+            });
+
+            const editor = document.querySelector('.editor');
+            if (!editor) {
+              return null;
+            }
+
+            window.NoteEditor.receiveCommand('loadDocument', { document: makeDocument('First') });
+            editor.scrollTop = editor.scrollHeight;
+
+            window.NoteEditor.receiveCommand('loadDocument', { document: makeDocument('Second') });
+            window.NoteEditor.receiveCommand('focusEditor', {});
+
+            await new Promise((resolve) => setTimeout(resolve, 25));
+
+            return {
+              scrollTop: editor.scrollTop,
+              scrollHeight: editor.scrollHeight,
+              clientHeight: editor.clientHeight,
+            };
+            """,
+            arguments: [:],
+            in: nil,
+            contentWorld: .page
+        )
+        let payload = try #require(result as? [String: Any])
+
+        #expect((payload["scrollHeight"] as? NSNumber)?.doubleValue ?? 0 > (payload["clientHeight"] as? NSNumber)?.doubleValue ?? 0)
+        #expect((payload["scrollTop"] as? NSNumber)?.doubleValue == 0)
+    }
+
     private func makeLoadedWebView() async throws -> WKWebView {
         let htmlURL = try #require(NoteEditorResources.editorHTMLURL())
         let directoryURL = try #require(NoteEditorResources.editorDirectoryURL())
-        let webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        let webView = WKWebView(
+            frame: CGRect(x: 0, y: 0, width: 320, height: 240),
+            configuration: WKWebViewConfiguration()
+        )
 
         let delegate = NavigationDelegate()
         webView.navigationDelegate = delegate

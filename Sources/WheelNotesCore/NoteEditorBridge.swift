@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import WebKit
 import WheelSupport
 
 @MainActor
@@ -38,6 +40,7 @@ public final class NoteEditorBridge: QueuedScriptBridge {
     }
 
     public func focusEditor() {
+        requestNativeFocus()
         sendCommand("focusEditor", payload: EmptyPayload())
     }
 
@@ -81,6 +84,34 @@ public final class NoteEditorBridge: QueuedScriptBridge {
 
     private func fingerprint(for document: NoteDocument) -> String? {
         document.canonicalJSONString
+    }
+
+    private func requestNativeFocus() {
+        NSApp.activate(ignoringOtherApps: true)
+
+        guard let webView = attachedWebView else { return }
+        focus(webView)
+
+        if webView.window == nil {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.focusAttachedWebViewIfNeeded()
+            }
+        }
+    }
+
+    private func focusAttachedWebViewIfNeeded() {
+        guard let webView = attachedWebView else { return }
+        focus(webView)
+    }
+
+    private func focus(_ webView: WKWebView) {
+        guard let window = webView.window else { return }
+        window.makeKeyAndOrderFront(nil)
+
+        if window.firstResponder !== webView {
+            _ = window.makeFirstResponder(webView)
+        }
     }
 }
 

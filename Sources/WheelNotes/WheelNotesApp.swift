@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct WheelNotesApp: App {
+    @NSApplicationDelegateAdaptor(WheelNotesAppDelegate.self) private var appDelegate
     @State private var model = WheelNotesModel()
 
     var body: some Scene {

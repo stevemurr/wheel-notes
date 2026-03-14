@@ -1010,6 +1010,11 @@ function setDocument(document: JSONObject | undefined) {
   )
 }
 
+function focusEditorAtStart() {
+  editorElement.scrollTop = 0
+  editor.commands.focus('start', { scrollIntoView: false })
+}
+
 function insertSourceBlock(source: SourcePayload | undefined) {
   if (!source) {
     return
@@ -1042,7 +1047,7 @@ window.NoteEditor = {
           setDocument(payload.document as JSONObject | undefined)
           break
         case 'focusEditor':
-          editor.commands.focus('end')
+          focusEditorAtStart()
           break
         case 'insertSourceBlock':
           insertSourceBlock(payload.source as SourcePayload | undefined)

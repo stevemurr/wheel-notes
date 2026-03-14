@@ -15,6 +15,10 @@ open class QueuedScriptBridge: NSObject, WKScriptMessageHandler {
         self.javaScriptReceiver = javaScriptReceiver
     }
 
+    public var attachedWebView: WKWebView? {
+        webView
+    }
+
     public func attach(to webView: WKWebView) {
         self.webView = webView
     }

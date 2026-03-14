@@ -47,6 +47,7 @@ let package = Package(
         .testTarget(
             name: "WheelNotesTests",
             dependencies: [
+                "WheelNotes",
                 "WheelNotesCore",
                 "WheelSupport",
                 .product(name: "Fabric", package: "fabric"),

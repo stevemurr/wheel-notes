@@ -148,10 +148,10 @@ private struct WheelNoteEditorPane: View {
         .background(Color(nsColor: .textBackgroundColor))
         .onAppear(perform: configureBridge)
         .onAppear {
-            syncEditor(with: note)
+            syncEditor(with: note, requestFocus: true)
         }
         .onChange(of: note.id) { _, _ in
-            syncEditor(with: note)
+            syncEditor(with: note, requestFocus: true)
         }
         .onChange(of: note.updatedAt) { _, _ in
             syncEditor(with: note)
@@ -160,8 +160,7 @@ private struct WheelNoteEditorPane: View {
 
     private func configureBridge() {
         editorBridge.onReady = {
-            syncEditor(with: note, force: true)
-            editorBridge.focusEditor()
+            syncEditor(with: model.selectedNote ?? note, force: true, requestFocus: true)
         }
         editorBridge.onDocumentChanged = { document in
             model.updateSelectedNoteDocument(document)
@@ -169,8 +168,12 @@ private struct WheelNoteEditorPane: View {
         editorBridge.onEditorError = { _ in }
     }
 
-    private func syncEditor(with note: NoteRecord, force: Bool = false) {
+    private func syncEditor(with note: NoteRecord, force: Bool = false, requestFocus: Bool = false) {
         editorBridge.activate(noteID: note.id)
         editorBridge.loadDocumentIfNeeded(note.document, force: force)
+
+        if requestFocus {
+            editorBridge.focusEditor()
+        }
     }
 }
